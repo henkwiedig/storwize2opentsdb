@@ -3,6 +3,7 @@
 #iostat.pl
 #
 # see: https://www.ibm.com/developerworks/community/wikis/home?lang=en#!/wiki/W1d985101fbfa_4ae7_a090_dc535355ae7e/page/Fetch+Performance+Stats
+#     https://www.ibm.com/support/knowledgecenter/STHGUJ_7.6.1/com.ibm.storwize.tb5.761.doc/svc_clusterstartstatswin_20qm0u.html
 #
 
 use XML::LibXML;
@@ -10,7 +11,7 @@ use Date::Parse;
 use File::Path;
 use Data::Dumper;
 
-$iostat_dir = '/tmp/storwize2opentsdb';
+$iostat_dir = '/home/henk/tmp/iostats/storwize2opentsdb/iostats';
 $keep_old_files = 1;
 
 sub read_config {
@@ -132,18 +133,172 @@ sub process_Nm_files {
               " cluster=".$cluster. 
               " node=".$node.
               " scope=".$scope.  
-			  " name=".$instance->attributes()->getNamedItem('id')->getValue().  
+              " name=".$instance->attributes()->getNamedItem('id')->getValue().  
               "\n";
-		@cas = $instance->childNodes()->get_node(2)->attributes();
-		for my $ca (@cas) {
-		  print "put storwize.iostat.".$base_metric.".cache.".$ca->nodeName()." ".$now." ". $ca->getValue(). 
-              " idx=".$instance->attributes()->getNamedItem('idx')->getValue(). 
+      }
+      #each instances has a cache child
+      for my $ca ($instance->findnodes('./*')) {
+        @attrs = $ca->attributes();
+        for my $metric (@attrs) {
+          print "put storwize.iostat.".$base_metric.".cache.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+                " idx=".$instance->attributes()->getNamedItem('idx')->getValue(). 
+                " cluster=".$cluster. 
+                " node=".$node.
+                " scope=".$scope.  
+                " name=".$instance->attributes()->getNamedItem('id')->getValue().  
+                "\n";
+	  }
+      }
+   }
+}
+
+sub process_Nn_files {
+    my $parser = XML::LibXML->new->parse_file($_[0]);
+    my $xml = XML::LibXML::XPathContext->new($parser);
+    $xml->registerNs('nodeStats','http://ibm.com/storage/management/performance/api/2006/01/nodeStats');
+    
+    
+    #read global variables
+    $timestamp = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('timestamp')->getValue();
+    $timezone = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('timezone')->getValue();
+    $cluster = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('cluster')->getValue();
+    $node = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('id')->getValue();
+    $scope = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('scope')->getValue();
+    $base_metric = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
+    
+    #parse the vaules timestamp
+    $now = str2time($timestamp . " " . $timezone);
+    
+    
+    #iterate over instances cpu
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:cpu')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs) {
+        print "put storwize.iostat.".$base_metric.".cpu.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " cluster=".$cluster. 
               " node=".$node.
               " scope=".$scope.  
-			  " name=".$instance->attributes()->getNamedItem('id')->getValue().  
               "\n";
-		}
+        
+      }
+    }
+    #iterate over instances cpu_core
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:cpu_core')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs[1 .. $#attrs]) {
+        print "put storwize.iostat.".$base_metric.".cpu_core.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+              " cpu_id=".$instance->attributes()->getNamedItem('id')->getValue().
+              " cluster=".$cluster. 
+              " node=".$node.
+              " scope=".$scope.  
+              "\n";
+        
+      }
+   }
+   #iterate over instances node
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:node')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs[4 .. $#attrs]) {
+        print "put storwize.iostat.".$base_metric.".node.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+              " node_id=".$instance->attributes()->getNamedItem('id')->getValue().
+              " cluster=".$cluster. 
+              " node=".$node.
+              " scope=".$scope.  
+              "\n";
+        
+      }
+   }
+   #iterate over instances port
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:port')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs[8 .. $#attrs]) {
+        print "put storwize.iostat.".$base_metric.".port.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+              " port_id=".$instance->attributes()->getNamedItem('id')->getValue().
+              " cluster=".$cluster. 
+              " node=".$node.
+              " scope=".$scope.  
+              "\n";
+        
+      }
+   }
+   #iterate over instances uca.ca
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:uca/nodeStats:ca')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs[0 .. $#attrs]) {
+        print "put storwize.iostat.".$base_metric.".uca.ca.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+              " cluster=".$cluster. 
+              " node=".$node.
+              " scope=".$scope.  
+              "\n";
+        
+      }
+   }
+   #iterate over instances uca.partition
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:uca/nodeStats:partition')) {
+      #each partition has a cache child
+      @cas = $instance->findnodes('./*');
+      for my $ca (@cas[0 .. $#cas]) {
+        @attrs = $ca->attributes();
+        for my $metric (@attrs[0 .. $#attrs]) {
+          print "put storwize.iostat.".$base_metric.".uca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+                " partition=".$instance->attributes()->getNamedItem('mdg')->getValue().
+                " cluster=".$cluster. 
+                " node=".$node.
+                " scope=".$scope.  
+                "\n";
+        
+        }
+     }
+  }
+   #iterate over instances lca.partition
+    for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:lca/nodeStats:partition')) {
+      #each partition has a cache child
+      @cas = $instance->findnodes('./*');
+      for my $ca (@cas[0 .. $#cas]) {
+        @attrs = $ca->attributes();
+        for my $metric (@attrs[0 .. $#attrs]) {
+          print "put storwize.iostat.".$base_metric.".lca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+                " partition=".$instance->attributes()->getNamedItem('mdg')->getValue().
+                " cluster=".$cluster. 
+                " node=".$node.
+                " scope=".$scope.  
+                "\n";
+        
+        }
+     }
+  }
+}
+
+sub process_Nv_files {
+    my $parser = XML::LibXML->new->parse_file($_[0]);
+    my $xml = XML::LibXML::XPathContext->new($parser);
+    $xml->registerNs('virtualDiskStats','http://ibm.com/storage/management/performance/api/2005/08/vDiskStats');
+    
+    
+    #read global variables
+    $timestamp = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('timestamp')->getValue();
+    $timezone = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('timezone')->getValue();
+    $cluster = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('cluster')->getValue();
+    $node = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('id')->getValue();
+    $scope = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('scope')->getValue();
+    $base_metric = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
+    
+    #parse the vaules timestamp
+    $now = str2time($timestamp . " " . $timezone);
+    
+    
+    #iterate over instances vdisk
+    for my $instance ($xml->findnodes('/virtualDiskStats:diskStatsColl/virtualDiskStats:vdsk')) {
+      @attrs = $instance->attributes();
+      for my $metric (@attrs) {
+        print "put storwize.iostat.".$base_metric.".vdsk.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+              " vdisk=".$instance->attributes()->getNamedItem('id')->getValue().
+              " vdisk_id=".$instance->attributes()->getNamedItem('idx')->getValue().
+              " cluster=".$cluster. 
+              " node=".$node.
+              " scope=".$scope.  
+              "\n" unless $metric->nodeName() =~ /id/;
+        
       }
     }
 }
@@ -154,11 +309,17 @@ foreach $svc (keys %config)
   $config{$svc}->{'iostatst_dir'} = $iostat_dir."/".$svc."/";
   #fetch_iostats($svc,\%config);
   search_files($svc,\%config);
-  #foreach $Nd_file (keys $config{$svc}->{'Nd_file'}) {
-  #  process_Nd_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nd_file'}->{$Nd_file});
-  #}
+  foreach $Nd_file (keys $config{$svc}->{'Nd_file'}) {
+    process_Nd_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nd_file'}->{$Nd_file});
+  }
   foreach $Nm_file (keys $config{$svc}->{'Nm_file'}) {
     process_Nm_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nm_file'}->{$Nm_file});
+  }
+  foreach $Nn_file (keys $config{$svc}->{'Nn_file'}) {
+    process_Nn_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nn_file'}->{$Nn_file});
+  }
+  foreach $Nv_file (keys $config{$svc}->{'Nv_file'}) {
+    process_Nv_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nv_file'}->{$Nv_file});
   }
   if (! $keep_old_files) {
     rmtree($config{$svc}->{'iostatst_dir'});
