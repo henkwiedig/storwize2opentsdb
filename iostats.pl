@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#iostat.pl
+#iostats.pl
 #
 # see: https://www.ibm.com/developerworks/community/wikis/home?lang=en#!/wiki/W1d985101fbfa_4ae7_a090_dc535355ae7e/page/Fetch+Performance+Stats
 #     https://www.ibm.com/support/knowledgecenter/STHGUJ_7.6.1/com.ibm.storwize.tb5.761.doc/svc_clusterstartstatswin_20qm0u.html
@@ -8,11 +8,15 @@
 
 use XML::LibXML;
 use Date::Parse;
-use File::Path;
+use File::Path qw(make_path remove_tree);
 use Data::Dumper;
+use IO::Socket::INET;
 
-$iostat_dir = '/home/henk/tmp/iostats/storwize2opentsdb/iostats';
-$keep_old_files = 1;
+$iostat_dir = '/dev/shm/storwize2opentsdb';
+$keep_old_files = 0;
+$tsd_host = $ENV{TSD_HOST};
+$tsd_port = $ENV{TSD_PORT};
+$tsd_file_name = '/dev/shm/storwize2opentsdb.tsdb';
 
 sub read_config {
 #we can read stor2rrd config files
@@ -48,10 +52,9 @@ sub copy_iostats_from_non_config_nodes_to_config_node {
 sub fetch_iostats {
   my $current = shift;
   my $params = shift;
-  mkpath( $params->{$current}->{'iostatst_dir'} ); 
+  make_path( $params->{$current}->{'iostatst_dir'} ); 
   $cmd = "scp -i ".$params->{$current}->{'key'}." ".$params->{$current}->{'ip'}.":/dumps/iostats/* ".$params->{$current}->{'iostatst_dir'};
   $result = `$cmd 2>&1`;
-  print $result;
 }
 
 sub search_files {
@@ -95,7 +98,7 @@ sub process_Nd_files {
     for my $instance ($xml->findnodes('/driveStats:diskStatsColl/driveStats:mdsk')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[2 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " idx=".$instance->attributes()->getNamedItem('idx')->getValue().
               " cluster=".$cluster. 
               " node=".$node.
@@ -128,7 +131,7 @@ sub process_Nm_files {
     for my $instance ($xml->findnodes('/diskStats:diskStatsColl/diskStats:mdsk')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[2 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " idx=".$instance->attributes()->getNamedItem('idx')->getValue(). 
               " cluster=".$cluster. 
               " node=".$node.
@@ -140,7 +143,7 @@ sub process_Nm_files {
       for my $ca ($instance->findnodes('./*')) {
         @attrs = $ca->attributes();
         for my $metric (@attrs) {
-          print "put storwize.iostat.".$base_metric.".cache.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+          print $tsd_file "put storwize.iostat.".$base_metric.".cache.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
                 " idx=".$instance->attributes()->getNamedItem('idx')->getValue(). 
                 " cluster=".$cluster. 
                 " node=".$node.
@@ -174,7 +177,7 @@ sub process_Nn_files {
     for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:cpu')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs) {
-        print "put storwize.iostat.".$base_metric.".cpu.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".cpu.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " cluster=".$cluster. 
               " node=".$node.
               " scope=".$scope.  
@@ -186,7 +189,7 @@ sub process_Nn_files {
     for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:cpu_core')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[1 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".cpu_core.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".cpu_core.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " cpu_id=".$instance->attributes()->getNamedItem('id')->getValue().
               " cluster=".$cluster. 
               " node=".$node.
@@ -199,7 +202,7 @@ sub process_Nn_files {
     for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:node')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[4 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".node.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".node.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " node_id=".$instance->attributes()->getNamedItem('id')->getValue().
               " cluster=".$cluster. 
               " node=".$node.
@@ -212,7 +215,7 @@ sub process_Nn_files {
     for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:port')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[8 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".port.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".port.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " port_id=".$instance->attributes()->getNamedItem('id')->getValue().
               " cluster=".$cluster. 
               " node=".$node.
@@ -225,7 +228,7 @@ sub process_Nn_files {
     for my $instance ($xml->findnodes('/nodeStats:diskStatsColl/nodeStats:uca/nodeStats:ca')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs[0 .. $#attrs]) {
-        print "put storwize.iostat.".$base_metric.".uca.ca.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".uca.ca.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " cluster=".$cluster. 
               " node=".$node.
               " scope=".$scope.  
@@ -240,7 +243,7 @@ sub process_Nn_files {
       for my $ca (@cas[0 .. $#cas]) {
         @attrs = $ca->attributes();
         for my $metric (@attrs[0 .. $#attrs]) {
-          print "put storwize.iostat.".$base_metric.".uca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+          print $tsd_file "put storwize.iostat.".$base_metric.".uca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
                 " partition=".$instance->attributes()->getNamedItem('mdg')->getValue().
                 " cluster=".$cluster. 
                 " node=".$node.
@@ -257,7 +260,7 @@ sub process_Nn_files {
       for my $ca (@cas[0 .. $#cas]) {
         @attrs = $ca->attributes();
         for my $metric (@attrs[0 .. $#attrs]) {
-          print "put storwize.iostat.".$base_metric.".lca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+          print $tsd_file "put storwize.iostat.".$base_metric.".lca.partition.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
                 " partition=".$instance->attributes()->getNamedItem('mdg')->getValue().
                 " cluster=".$cluster. 
                 " node=".$node.
@@ -291,7 +294,7 @@ sub process_Nv_files {
     for my $instance ($xml->findnodes('/virtualDiskStats:diskStatsColl/virtualDiskStats:vdsk')) {
       @attrs = $instance->attributes();
       for my $metric (@attrs) {
-        print "put storwize.iostat.".$base_metric.".vdsk.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+        print $tsd_file "put storwize.iostat.".$base_metric.".".$metric->nodeName()." ".$now." ". $metric->getValue(). 
               " vdisk=".$instance->attributes()->getNamedItem('id')->getValue().
               " vdisk_id=".$instance->attributes()->getNamedItem('idx')->getValue().
               " cluster=".$cluster. 
@@ -300,14 +303,46 @@ sub process_Nv_files {
               "\n" unless $metric->nodeName() =~ /id/;
         
       }
+	  #each instances has a cache child
+	  for my $ca ($instance->childNodes()->get_node(2)) {
+        @attrs = $ca->attributes();
+        for my $metric (@attrs) {
+          print $tsd_file "put storwize.iostat.".$base_metric.".cache.".$metric->nodeName()." ".$now." ". $metric->getValue().
+                " vdisk=".$instance->attributes()->getNamedItem('id')->getValue().
+                " vdisk_id=".$instance->attributes()->getNamedItem('idx')->getValue().
+                " cluster=".$cluster. 
+                " node=".$node.
+                " scope=".$scope.  
+                "\n";
+	  }
+      }
+	  #iterate over vdisk copys
+	  for my $copy ($instance->getElementsByTagNameNS('*','cpy')) {
+	    for my $ca ($instance->childNodes()->get_node(2)) {
+          @attrs = $ca->attributes();
+          for my $metric (@attrs) {
+            print $tsd_file "put storwize.iostat.".$base_metric.".copy.cache.".$metric->nodeName()." ".$now." ". $metric->getValue(). 
+                  " vdisk=".$instance->attributes()->getNamedItem('id')->getValue().
+                  " vdisk_id=".$instance->attributes()->getNamedItem('idx')->getValue().
+                  " cluster=".$cluster. 
+                  " node=".$node.
+                  " scope=".$scope.  
+				  " copy_id=".$copy->attributes()->getNamedItem('idx')->getValue().
+                  "\n";
+		  }
+	    }
     }
+	}
 }
 
 read_config();
+
+open($tsd_file, '>' ,$tsd_file_name);   
+
 foreach $svc (keys %config)
 {
   $config{$svc}->{'iostatst_dir'} = $iostat_dir."/".$svc."/";
-  #fetch_iostats($svc,\%config);
+  fetch_iostats($svc,\%config);
   search_files($svc,\%config);
   foreach $Nd_file (keys $config{$svc}->{'Nd_file'}) {
     process_Nd_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nd_file'}->{$Nd_file});
@@ -321,16 +356,30 @@ foreach $svc (keys %config)
   foreach $Nv_file (keys $config{$svc}->{'Nv_file'}) {
     process_Nv_files($config{$svc}->{'iostatst_dir'} . $config{$svc}->{'Nv_file'}->{$Nv_file});
   }
-  if (! $keep_old_files) {
-    rmtree($config{$svc}->{'iostatst_dir'});
-  }
 }
 
+print $tsd_file "exit\n";
+
+close ($tsd_file);
 
 
+#open socket to tsd to push data
+$tsd = IO::Socket::INET->new(
+   PeerAddr   =>   $tsd_host,
+   PeerPort   =>   $tsd_port,
+   Proto      =>   'tcp'
+   );
+open($tsd_file, '<' ,$tsd_file_name);
+while (<$tsd_file>) {
+  print $tsd $_;
+}
+close ($tsd_file);
+$tsd->shutdown(1);
+close $tsd;
 
+if (! $keep_old_files) {
+   remove_tree($iostat_dir) or warn "Could not unlink $file: $!";
+   unlink $tsd_file_name or warn "Could not unlink $file: $!";
+}
 
-
-
-
-
+exit 0;
