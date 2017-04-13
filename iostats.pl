@@ -91,7 +91,7 @@ sub process_Nd_files {
     $base_metric = $xml->findnodes('/driveStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
     
     #parse the vaules timestamp
-    $now = str2time($timestamp . " " . $timezone);
+    $now = str2time($timestamp , $timezone);
     
     
     #iterate over instances
@@ -124,7 +124,7 @@ sub process_Nm_files {
     $base_metric = $xml->findnodes('/diskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
     
     #parse the vaules timestamp
-    $now = str2time($timestamp . " " . $timezone);
+    $now = str2time($timestamp , $timezone);
     
     
     #iterate over instances
@@ -170,7 +170,7 @@ sub process_Nn_files {
     $base_metric = $xml->findnodes('/nodeStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
     
     #parse the vaules timestamp
-    $now = str2time($timestamp . " " . $timezone);
+    $now = str2time($timestamp , $timezone);
     
     
     #iterate over instances cpu
@@ -287,7 +287,7 @@ sub process_Nv_files {
     $base_metric = $xml->findnodes('/virtualDiskStats:diskStatsColl')->get_node(1)->attributes->getNamedItem('contains')->getValue();
     
     #parse the vaules timestamp
-    $now = str2time($timestamp . " " . $timezone);
+    $now = str2time($timestamp , $timezone);
     
     
     #iterate over instances vdisk
